@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 420" width="300" height="420">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="50%" r="70%">
+      <stop offset="0%" stop-color="#1a1040"/>
+      <stop offset="100%" stop-color="#0d0d1a"/>
+    </radialGradient>
+    <pattern id="diamond" x="0" y="0" width="30" height="30" patternUnits="userSpaceOnUse">
+      <polygon points="15,2 28,15 15,28 2,15" fill="none" stroke="#c9a84c" stroke-width="0.4" opacity="0.25"/>
+    </pattern>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="300" height="420" rx="14" ry="14" fill="url(#bg)"/>
+
+  <!-- Diamond lattice -->
+  <rect width="300" height="420" rx="14" ry="14" fill="url(#diamond)"/>
+
+  <!-- Outer border -->
+  <rect x="6" y="6" width="288" height="408" rx="10" ry="10"
+        fill="none" stroke="#c9a84c" stroke-width="2" opacity="0.8"/>
+
+  <!-- Inner border -->
+  <rect x="14" y="14" width="272" height="392" rx="7" ry="7"
+        fill="none" stroke="#c9a84c" stroke-width="0.8" opacity="0.4"/>
+
+  <!-- Center emblem: stylized star/diamond -->
+  <g filter="url(#glow)" transform="translate(150,210)">
+    <polygon points="0,-55 13,-13 55,0 13,13 0,55 -13,13 -55,0 -13,-13"
+             fill="#c9a84c" opacity="0.9"/>
+    <polygon points="0,-35 8,-8 35,0 8,8 0,35 -8,8 -35,0 -8,-8"
+             fill="#0d0d1a" opacity="0.85"/>
+    <circle cx="0" cy="0" r="10" fill="#c9a84c" opacity="0.9"/>
+  </g>
+
+  <!-- Corner ornaments -->
+  <g opacity="0.6" stroke="#c9a84c" stroke-width="1.2" fill="none">
+    <path d="M20,20 L36,20 L36,24 M20,20 L20,36 L24,36"/>
+    <path d="M280,20 L264,20 L264,24 M280,20 L280,36 L276,36"/>
+    <path d="M20,400 L36,400 L36,396 M20,400 L20,384 L24,384"/>
+    <path d="M280,400 L264,400 L264,396 M280,400 L280,384 L276,384"/>
+  </g>
+
+  <!-- "SHOOB" watermark -->
+  <text x="150" y="370" text-anchor="middle" font-family="serif"
+        font-size="13" fill="#c9a84c" opacity="0.45" letter-spacing="6">SHOOB</text>
+</svg>

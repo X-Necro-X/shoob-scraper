@@ -1,0 +1,158 @@
+import argparse
+import asyncio
+import json
+import math
+import random
+import re
+import sys
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+from playwright.async_api import async_playwright, Page
+
+BASE_URL = "https://shoob.gg/cards"
+OUTPUT_DIR = "./cards"
+SEEN_FILE = "./seen.json"
+CARDS_PER_PAGE = 15
+
+
+def load_seen(path: str = SEEN_FILE) -> list:
+    p = Path(path)
+    if not p.exists():
+        return []
+    return json.loads(p.read_text())
+
+
+def save_seen(seen: list, path: str = SEEN_FILE) -> None:
+    Path(path).write_text(json.dumps(seen))
+
+
+def generate_unique_number(seen: list, total: int) -> int:
+    seen_set = set(seen)
+    if len(seen_set) >= total:
+        print("All cards downloaded.")
+        sys.exit(0)
+    while True:
+        n = random.randint(1, total)
+        if n not in seen_set:
+            return n
+
+
+def calculate_page_and_index(number: int, cards_per_page: int = CARDS_PER_PAGE) -> tuple:
+    page = math.ceil(number / cards_per_page)
+    index = (number - 1) % cards_per_page
+    return page, index
+
+
+def sanitize_component(name: str) -> str:
+    name = re.sub(r'[^A-Za-z0-9 \-]', '', name)
+    name = re.sub(r'\s+', '-', name.strip())
+    name = re.sub(r'-+', '-', name)
+    return name
+
+
+def build_filename(card_name: str, anime_name: str, tier: str, output_dir: str, ext: str) -> Path:
+    output_dir = Path(output_dir)
+    base = f"{card_name}-{anime_name}-{tier}"
+    pattern = re.compile(rf"^{re.escape(base)}-(\d+){re.escape(ext)}$")
+    max_n = 0
+    if output_dir.exists():
+        for f in output_dir.iterdir():
+            m = pattern.match(f.name)
+            if m:
+                max_n = max(max_n, int(m.group(1)))
+    return output_dir / f"{base}-{max_n + 1}{ext}"
+
+
+async def fetch_total(page: Page) -> int:
+    await page.goto(BASE_URL)
+    total_el = page.locator("text=/TOTAL \\d+/i").first
+    await total_el.wait_for()
+    text = await total_el.inner_text()
+    m = re.search(r'Total (\d+)', text, re.IGNORECASE)
+    if not m:
+        print("Error: could not parse total card count from page.")
+        sys.exit(1)
+    return int(m.group(1))
+
+
+async def get_card_info(page: Page, card_page: int, card_index: int) -> dict:
+    await page.goto(f"{BASE_URL}?page={card_page}")
+    await page.locator('a[href^="/cards/info/"]').first.wait_for()
+    links = page.locator('a[href^="/cards/info/"]')
+    await links.nth(card_index).click()
+    await page.locator('ol li').nth(3).wait_for()
+    items = page.locator('ol li')
+    tier_text = await items.nth(1).inner_text()
+    anime_name = await items.nth(2).inner_text()
+    card_name = await items.nth(3).inner_text()
+    tier_num = re.search(r'\d+', tier_text)
+    tier = f"T{tier_num.group()}" if tier_num else sanitize_component(tier_text)
+    img = page.locator('img.img-fluid').first
+    await img.wait_for()
+    image_url = await img.get_attribute('src')
+    if image_url and not image_url.startswith('http'):
+        image_url = urllib.parse.urljoin(f"{BASE_URL}/", image_url)
+    if not image_url:
+        print("Error: could not find image URL on card page.")
+        sys.exit(1)
+    return {
+        'card_name': card_name.strip(),
+        'anime_name': anime_name.strip(),
+        'tier': tier,
+        'image_url': image_url.strip(),
+    }
+
+
+async def download_image(url: str, dest: Path, page: Page) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_suffix(dest.suffix + '.tmp')
+    try:
+        response = await page.context.request.get(url)
+        if not response.ok:
+            raise RuntimeError(f"Image download failed: HTTP {response.status}")
+        body = await response.body()
+        tmp.write_bytes(body)
+        tmp.rename(dest)
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
+
+
+async def main() -> None:
+    parser = argparse.ArgumentParser(description="Download a random shoob.gg card.")
+    parser.add_argument('--headed', action='store_true', help='Show browser window')
+    args = parser.parse_args()
+
+    seen = load_seen()
+
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=not args.headed)
+        page = await browser.new_page()
+        try:
+            total = await fetch_total(page)
+            number = generate_unique_number(seen, total)
+            card_page, card_index = calculate_page_and_index(number)
+
+            info = await get_card_info(page, card_page, card_index)
+
+            card_name = sanitize_component(info['card_name'])
+            anime_name = sanitize_component(info['anime_name'])
+            tier = info['tier']
+
+            ext = Path(urllib.parse.urlparse(info['image_url']).path).suffix or '.png'
+            dest = build_filename(card_name, anime_name, tier, OUTPUT_DIR, ext)
+
+            await download_image(info['image_url'], dest, page)
+
+            seen.append(number)
+            save_seen(seen)
+
+            print(f"Downloaded: {dest.name}")
+        finally:
+            await browser.close()
+
+
+if __name__ == '__main__':
+    asyncio.run(main())

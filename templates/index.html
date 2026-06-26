@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Shoob Gacha</title>
+  <link rel="stylesheet" href="/static/style.css"/>
+</head>
+<body>
+
+  <h1 class="title"><span>✦</span> SHOOB GACHA <span>✦</span></h1>
+
+  <!-- Card stage -->
+  <div class="card-stage">
+    <div class="card-inner" id="cardInner">
+
+      <!-- Back face (shown by default) -->
+      <div class="card-back" id="cardBack">
+        <img src="/static/card-back.svg" alt="Card back"/>
+      </div>
+
+      <!-- Front face (revealed after flip) -->
+      <div class="card-front" id="cardFront">
+        <div class="card-front-image" id="cardImageWrap">
+          <img id="cardImage" src="" alt="Card"/>
+        </div>
+        <span class="tier-badge" id="tierBadge"></span>
+        <div class="card-front-info">
+          <div class="card-name" id="cardName"></div>
+          <div class="card-anime" id="cardAnime"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Draw button -->
+  <button class="btn-draw" id="btnDraw" onclick="draw()">Draw Card</button>
+  <a class="btn-draw" href="/collection" style="margin-top:0.6rem;text-decoration:none;display:inline-block;text-align:center">Collection</a>
+
+  <!-- History -->
+  <div class="history-section" id="historySection" style="display:none">
+    <div class="history-label">Session History</div>
+    <div class="history-strip" id="historyStrip"></div>
+  </div>
+
+  <script>
+    const cardInner  = document.getElementById('cardInner');
+    const cardBack   = document.getElementById('cardBack');
+    const cardFront  = document.getElementById('cardFront');
+    const cardImage  = document.getElementById('cardImage');
+    const tierBadge  = document.getElementById('tierBadge');
+    const cardName   = document.getElementById('cardName');
+    const cardAnime  = document.getElementById('cardAnime');
+    const btnDraw    = document.getElementById('btnDraw');
+    const historySection = document.getElementById('historySection');
+    const historyStrip   = document.getElementById('historyStrip');
+
+    let pollTimer = null;
+
+    function tierClass(tier) {
+      if (!tier) return 'tier-unknown';
+      const t = tier.toUpperCase();
+      if (t === 'T1' || t === 'R')   return 'tier-t1';
+      if (t === 'T2' || t === 'SR')  return 'tier-t2';
+      if (t === 'T3' || t === 'SSR') return 'tier-t3';
+      if (t === 'T4') return 'tier-t4';
+      if (t === 'T5') return 'tier-t5';
+      if (t === 'T6') return 'tier-t6';
+      if (t === 'S')  return 'tier-s';
+      return 'tier-unknown';
+    }
+
+    function setLoading() {
+      cardInner.classList.remove('flipped');
+      cardBack.className = 'card-back loading';
+      cardBack.innerHTML = '';
+      const img = document.createElement('img');
+      img.src = '/static/card-back.svg';
+      img.alt = 'Card back';
+      cardBack.appendChild(img);
+      btnDraw.disabled = true;
+      btnDraw.textContent = 'Drawing...';
+    }
+
+    function showError(msg) {
+      cardBack.className = 'card-back';
+      const wrapper = document.createElement('div');
+      wrapper.className = 'card-error';
+      const icon = document.createElement('div');
+      icon.className = 'error-icon';
+      icon.textContent = '✕';
+      const text = document.createElement('div');
+      text.textContent = msg;
+      wrapper.appendChild(icon);
+      wrapper.appendChild(text);
+      cardBack.innerHTML = '';
+      cardBack.appendChild(wrapper);
+      btnDraw.disabled = false;
+      btnDraw.textContent = 'Try Again';
+    }
+
+    function revealCard(card) {
+      // Populate front face
+      cardImage.src = `/cards/${card.image}`;
+      cardName.textContent = card.name;
+      cardAnime.textContent = card.anime;
+      tierBadge.textContent = card.tier;
+      tierBadge.className = `tier-badge ${tierClass(card.tier)}`;
+
+      // Wait for image to load then flip
+      cardImage.onload = () => {
+        cardBack.className = 'card-back'; // stop loading animation
+        cardInner.classList.add('flipped');
+        btnDraw.disabled = false;
+        btnDraw.textContent = 'Draw Another';
+        addToHistory(card);
+      };
+      cardImage.onerror = () => {
+        showError('Image failed to load.');
+      };
+    }
+
+    function addToHistory(card) {
+      historySection.style.display = '';
+      const thumb = document.createElement('div');
+      thumb.className = 'history-thumb';
+      thumb.title = `${card.name} · ${card.anime} · ${card.tier}`;
+      const img = document.createElement('img');
+      img.src = `/cards/${card.image}`;
+      img.alt = card.name;
+      thumb.appendChild(img);
+      historyStrip.appendChild(thumb);
+      // Scroll to end
+      historyStrip.scrollLeft = historyStrip.scrollWidth;
+    }
+
+    function poll(jobId) {
+      fetch(`/status/${jobId}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.status === 'running') {
+            pollTimer = setTimeout(() => poll(jobId), 1000);
+          } else if (data.status === 'done') {
+            revealCard(data.card);
+          } else {
+            showError(data.message || 'Something went wrong.');
+          }
+        })
+        .catch(() => {
+          showError('Network error while polling.');
+        });
+    }
+
+    function draw() {
+      if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+      setLoading();
+      fetch('/draw', { method: 'POST' })
+        .then(r => {
+          if (r.status === 409) throw new Error('A draw is already in progress.');
+          if (!r.ok) throw new Error('Server error starting draw.');
+          return r.json();
+        })
+        .then(data => {
+          poll(data.job_id);
+        })
+        .catch(err => {
+          showError(err.message);
+        });
+    }
+  </script>
+
+</body>
+</html>

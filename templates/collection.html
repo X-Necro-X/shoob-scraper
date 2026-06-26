@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Collection — Shoob Gacha</title>
+  <link rel="stylesheet" href="/static/style.css"/>
+</head>
+<body>
+
+  <a class="back-link" href="/">← Back</a>
+  <h1 class="title"><span>✦</span> COLLECTION <span>✦</span></h1>
+
+  <div class="collection-controls">
+    <label for="searchInput" class="sr-only">Search cards</label>
+    <input class="collection-search" id="searchInput" type="text"
+           placeholder="Search by name or anime…" autocomplete="off"/>
+    <div class="tier-toggles">
+      <button class="tier-toggle active" data-tier="">ALL</button>
+      <button class="tier-toggle" data-tier="T1">T1</button>
+      <button class="tier-toggle" data-tier="T2">T2</button>
+      <button class="tier-toggle" data-tier="T3">T3</button>
+      <button class="tier-toggle" data-tier="T4">T4</button>
+      <button class="tier-toggle" data-tier="T5">T5</button>
+      <button class="tier-toggle" data-tier="T6">T6</button>
+      <button class="tier-toggle" data-tier="S">S</button>
+    </div>
+  </div>
+
+  <div class="collection-grid" id="cardGrid"></div>
+  <div class="collection-empty" id="emptyState" style="display:none">No cards found.</div>
+  <div id="sentinel" style="height:1px"></div>
+
+  <div class="collection-modal" id="modal" style="display:none"
+       role="dialog" aria-modal="true" aria-label="Card preview">
+    <div class="collection-modal-backdrop" id="modalBackdrop"></div>
+    <div class="collection-modal-inner">
+      <button class="modal-close" id="modalClose" aria-label="Close preview">×</button>
+      <img id="modalImage" src="" alt=""/>
+      <span class="tier-badge" id="modalTier"></span>
+      <div class="card-front-info">
+        <div class="card-name" id="modalName"></div>
+        <div class="card-anime" id="modalAnime"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const PAGE_SIZE = 20;
+    let offset = 0;
+    let activeTier = '';
+    let searchQuery = '';
+    let isFetching = false;
+    let hasMore = true;
+    let debounceTimer = null;
+    let observer = null;
+    let generation = 0;
+
+    const grid        = document.getElementById('cardGrid');
+    const emptyState  = document.getElementById('emptyState');
+    const searchInput = document.getElementById('searchInput');
+    const sentinel    = document.getElementById('sentinel');
+    const modal       = document.getElementById('modal');
+    const modalBackdrop = document.getElementById('modalBackdrop');
+    const modalClose = document.getElementById('modalClose');
+    const modalImage  = document.getElementById('modalImage');
+    const modalTier   = document.getElementById('modalTier');
+    const modalName   = document.getElementById('modalName');
+    const modalAnime  = document.getElementById('modalAnime');
+
+    function tierClass(tier) {
+      if (!tier) return 'tier-unknown';
+      const t = tier.toUpperCase();
+      if (t === 'T1' || t === 'R')   return 'tier-t1';
+      if (t === 'T2' || t === 'SR')  return 'tier-t2';
+      if (t === 'T3' || t === 'SSR') return 'tier-t3';
+      if (t === 'T4') return 'tier-t4';
+      if (t === 'T5') return 'tier-t5';
+      if (t === 'T6') return 'tier-t6';
+      if (t === 'S')  return 'tier-s';
+      return 'tier-unknown';
+    }
+
+    function buildCard(card) {
+      const el = document.createElement('div');
+      el.className = 'collection-card';
+      el.tabIndex = 0;
+      el.setAttribute('role', 'button');
+      el.setAttribute('aria-label', `View ${card.name} from ${card.anime}`);
+      el.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openModal(card); }
+      });
+      const img = document.createElement('img');
+      img.src = `/cards/${card.image}`;
+      img.alt = card.name;
+      img.loading = 'lazy';
+      const badge = document.createElement('span');
+      badge.className = `tier-badge ${tierClass(card.tier)}`;
+      badge.textContent = card.tier;
+      el.appendChild(img);
+      el.appendChild(badge);
+      el.addEventListener('click', () => openModal(card));
+      return el;
+    }
+
+    function openModal(card) {
+      modalImage.src = `/cards/${card.image}`;
+      modalImage.alt = card.name;
+      modalTier.textContent = card.tier;
+      modalTier.className = `tier-badge ${tierClass(card.tier)}`;
+      modalName.textContent = card.name;
+      modalAnime.textContent = card.anime;
+      modal.style.display = 'flex';
+    }
+
+    function closeModal() {
+      modal.style.display = 'none';
+      modalImage.src = '';
+    }
+
+    modalBackdrop.addEventListener('click', closeModal);
+    modalClose.addEventListener('click', closeModal);
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') closeModal();
+    });
+
+    function reset() {
+      generation++;
+      offset = 0;
+      hasMore = true;
+      grid.innerHTML = '';
+      emptyState.style.display = 'none';
+      if (observer) { observer.disconnect(); observer = null; }
+      setupObserver();
+    }
+
+    function setupObserver() {
+      observer = new IntersectionObserver(entries => {
+        if (entries[0].isIntersecting && hasMore && !isFetching) {
+          fetchPage();
+        }
+      }, { rootMargin: '200px' });
+      observer.observe(sentinel);
+    }
+
+    function fetchPage() {
+      if (isFetching) return;
+      isFetching = true;
+      const gen = generation;
+      const params = new URLSearchParams({
+        offset,
+        limit: PAGE_SIZE,
+        q: searchQuery,
+        tier: activeTier,
+      });
+      fetch(`/api/cards?${params}`)
+        .then(r => {
+          if (!r.ok) throw new Error(`Server error: ${r.status}`);
+          return r.json();
+        })
+        .then(data => {
+          if (gen !== generation) return;
+          data.cards.forEach(card => grid.appendChild(buildCard(card)));
+          offset += data.cards.length;
+          hasMore = data.has_more;
+          if (!hasMore && observer) { observer.disconnect(); observer = null; }
+          emptyState.style.display = data.total === 0 ? 'block' : 'none';
+        })
+        .catch(err => console.error('Collection fetch failed:', err))
+        .finally(() => { isFetching = false; });
+    }
+
+    document.querySelectorAll('.tier-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const wasActive = btn.classList.contains('active');
+        document.querySelectorAll('.tier-toggle').forEach(b => b.classList.remove('active'));
+        if (wasActive && btn.dataset.tier !== '') {
+          // deselect back to ALL
+          document.querySelector('.tier-toggle[data-tier=""]').classList.add('active');
+          activeTier = '';
+        } else {
+          btn.classList.add('active');
+          activeTier = btn.dataset.tier;
+        }
+        reset();
+      });
+    });
+
+    searchInput.addEventListener('input', () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        searchQuery = searchInput.value.trim();
+        reset();
+      }, 300);
+    });
+
+    setupObserver();
+  </script>
+
+</body>
+</html>
