@@ -14,13 +14,13 @@ if %errorlevel% neq 0 ( echo FAILED: playwright install && exit /b 1 )
 
 echo.
 echo [3/3] Building shoob.exe...
-pyinstaller shoob.spec --clean
+pyinstaller shoob.spec --clean --distpath .
 if %errorlevel% neq 0 ( echo FAILED: pyinstaller && exit /b 1 )
 
 echo.
-if exist dist\shoob.exe (
-    echo BUILD SUCCESSFUL -^> dist\shoob.exe
+if exist shoob.exe (
+    echo BUILD SUCCESSFUL -^> shoob.exe
 ) else (
-    echo BUILD FAILED: dist\shoob.exe not found
+    echo BUILD FAILED: shoob.exe not found
     exit /b 1
 )
