@@ -36,7 +36,7 @@
     <div class="collection-modal-backdrop" id="modalBackdrop"></div>
     <div class="collection-modal-inner">
       <button class="modal-close" id="modalClose" aria-label="Close preview">×</button>
-      <img id="modalImage" src="" alt=""/>
+      <div id="modalMediaWrap" style="flex:1;min-height:0;overflow:hidden;display:flex"></div>
       <span class="tier-badge" id="modalTier"></span>
       <div class="card-front-info">
         <div class="card-name" id="modalName"></div>
@@ -60,13 +60,13 @@
     const emptyState  = document.getElementById('emptyState');
     const searchInput = document.getElementById('searchInput');
     const sentinel    = document.getElementById('sentinel');
-    const modal       = document.getElementById('modal');
-    const modalBackdrop = document.getElementById('modalBackdrop');
-    const modalClose = document.getElementById('modalClose');
-    const modalImage  = document.getElementById('modalImage');
-    const modalTier   = document.getElementById('modalTier');
-    const modalName   = document.getElementById('modalName');
-    const modalAnime  = document.getElementById('modalAnime');
+    const modal          = document.getElementById('modal');
+    const modalBackdrop  = document.getElementById('modalBackdrop');
+    const modalClose     = document.getElementById('modalClose');
+    const modalMediaWrap = document.getElementById('modalMediaWrap');
+    const modalTier      = document.getElementById('modalTier');
+    const modalName      = document.getElementById('modalName');
+    const modalAnime     = document.getElementById('modalAnime');
 
     function tierClass(tier) {
       if (!tier) return 'tier-unknown';
@@ -90,22 +90,56 @@
       el.addEventListener('keydown', e => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openModal(card); }
       });
-      const img = document.createElement('img');
-      img.src = `/cards/${card.image}`;
-      img.alt = card.name;
-      img.loading = 'lazy';
+      const isVideo = card.image.toLowerCase().endsWith('.webm');
+      if (isVideo) {
+        const video = document.createElement('video');
+        video.autoplay = true;
+        video.loop = true;
+        video.muted = true;
+        video.setAttribute('playsinline', '');
+        const source = document.createElement('source');
+        source.src = `/cards/${card.image}`;
+        source.type = 'video/webm';
+        video.appendChild(source);
+        el.appendChild(video);
+      } else {
+        const img = document.createElement('img');
+        img.src = `/cards/${card.image}`;
+        img.alt = card.name;
+        img.loading = 'lazy';
+        el.appendChild(img);
+      }
       const badge = document.createElement('span');
       badge.className = `tier-badge ${tierClass(card.tier)}`;
       badge.textContent = card.tier;
-      el.appendChild(img);
       el.appendChild(badge);
       el.addEventListener('click', () => openModal(card));
       return el;
     }
 
     function openModal(card) {
-      modalImage.src = `/cards/${card.image}`;
-      modalImage.alt = card.name;
+      modalMediaWrap.innerHTML = '';
+      const isVideo = card.image.toLowerCase().endsWith('.webm');
+      if (isVideo) {
+        const video = document.createElement('video');
+        video.autoplay = true;
+        video.loop = true;
+        video.muted = true;
+        video.controls = true;
+        video.setAttribute('playsinline', '');
+        video.style.cssText = 'flex:1;width:100%;object-fit:cover;display:block;min-height:0';
+        const source = document.createElement('source');
+        source.src = `/cards/${card.image}`;
+        source.type = 'video/webm';
+        video.appendChild(source);
+        modalMediaWrap.appendChild(video);
+      } else {
+        const img = document.createElement('img');
+        img.src = `/cards/${card.image}`;
+        img.alt = card.name;
+        img.style.cssText = 'flex:1;width:100%;object-fit:cover;display:block;min-height:0';
+        modalMediaWrap.appendChild(img);
+      }
       modalTier.textContent = card.tier;
       modalTier.className = `tier-badge ${tierClass(card.tier)}`;
       modalName.textContent = card.name;
@@ -115,7 +149,7 @@
 
     function closeModal() {
       modal.style.display = 'none';
-      modalImage.src = '';
+      modalMediaWrap.innerHTML = '';
     }
 
     modalBackdrop.addEventListener('click', closeModal);

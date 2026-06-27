@@ -150,7 +150,7 @@ def api_cards():
 
     all_cards = []
     for p in cards_dir.iterdir():
-        if p.suffix.lower() != '.png':
+        if p.suffix.lower() not in ('.png', '.webm'):
             continue
         card = parse_filename(p.name)
         parts = p.stem.split('-')

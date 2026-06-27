@@ -21,9 +21,7 @@
 
       <!-- Front face (revealed after flip) -->
       <div class="card-front" id="cardFront">
-        <div class="card-front-image" id="cardImageWrap">
-          <img id="cardImage" src="" alt="Card"/>
-        </div>
+        <div class="card-front-image" id="cardImageWrap"></div>
         <span class="tier-badge" id="tierBadge"></span>
         <div class="card-front-info">
           <div class="card-name" id="cardName"></div>
@@ -45,14 +43,13 @@
   </div>
 
   <script>
-    const cardInner  = document.getElementById('cardInner');
-    const cardBack   = document.getElementById('cardBack');
-    const cardFront  = document.getElementById('cardFront');
-    const cardImage  = document.getElementById('cardImage');
-    const tierBadge  = document.getElementById('tierBadge');
-    const cardName   = document.getElementById('cardName');
-    const cardAnime  = document.getElementById('cardAnime');
-    const btnDraw    = document.getElementById('btnDraw');
+    const cardInner      = document.getElementById('cardInner');
+    const cardBack       = document.getElementById('cardBack');
+    const cardImageWrap  = document.getElementById('cardImageWrap');
+    const tierBadge      = document.getElementById('tierBadge');
+    const cardName       = document.getElementById('cardName');
+    const cardAnime      = document.getElementById('cardAnime');
+    const btnDraw        = document.getElementById('btnDraw');
     const historySection = document.getElementById('historySection');
     const historyStrip   = document.getElementById('historyStrip');
 
@@ -101,24 +98,44 @@
     }
 
     function revealCard(card) {
-      // Populate front face
-      cardImage.src = `/cards/${card.image}`;
       cardName.textContent = card.name;
       cardAnime.textContent = card.anime;
       tierBadge.textContent = card.tier;
       tierBadge.className = `tier-badge ${tierClass(card.tier)}`;
 
-      // Wait for image to load then flip
-      cardImage.onload = () => {
-        cardBack.className = 'card-back'; // stop loading animation
+      cardImageWrap.innerHTML = '';
+      const isVideo = card.image.toLowerCase().endsWith('.webm');
+
+      function onReady() {
+        cardBack.className = 'card-back';
         cardInner.classList.add('flipped');
         btnDraw.disabled = false;
         btnDraw.textContent = 'Draw Another';
         addToHistory(card);
-      };
-      cardImage.onerror = () => {
-        showError('Image failed to load.');
-      };
+      }
+
+      if (isVideo) {
+        const video = document.createElement('video');
+        video.autoplay = true;
+        video.loop = true;
+        video.muted = true;
+        video.setAttribute('playsinline', '');
+        const source = document.createElement('source');
+        source.src = `/cards/${card.image}`;
+        source.type = 'video/webm';
+        video.appendChild(source);
+        video.oncanplay = onReady;
+        video.onerror = () => showError('Video failed to load.');
+        cardImageWrap.appendChild(video);
+        video.load();
+      } else {
+        const img = document.createElement('img');
+        img.src = `/cards/${card.image}`;
+        img.alt = card.name;
+        img.onload = onReady;
+        img.onerror = () => showError('Image failed to load.');
+        cardImageWrap.appendChild(img);
+      }
     }
 
     function addToHistory(card) {
@@ -126,12 +143,25 @@
       const thumb = document.createElement('div');
       thumb.className = 'history-thumb';
       thumb.title = `${card.name} · ${card.anime} · ${card.tier}`;
-      const img = document.createElement('img');
-      img.src = `/cards/${card.image}`;
-      img.alt = card.name;
-      thumb.appendChild(img);
+      const isVideo = card.image.toLowerCase().endsWith('.webm');
+      if (isVideo) {
+        const video = document.createElement('video');
+        video.autoplay = true;
+        video.loop = true;
+        video.muted = true;
+        video.setAttribute('playsinline', '');
+        const source = document.createElement('source');
+        source.src = `/cards/${card.image}`;
+        source.type = 'video/webm';
+        video.appendChild(source);
+        thumb.appendChild(video);
+      } else {
+        const img = document.createElement('img');
+        img.src = `/cards/${card.image}`;
+        img.alt = card.name;
+        thumb.appendChild(img);
+      }
       historyStrip.appendChild(thumb);
-      // Scroll to end
       historyStrip.scrollLeft = historyStrip.scrollWidth;
     }
 

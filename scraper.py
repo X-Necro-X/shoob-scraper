@@ -92,18 +92,37 @@ async def get_card_info(page: Page, card_page: int, card_index: int) -> dict:
     card_name = await items.nth(3).inner_text()
     tier_num = re.search(r'\d+', tier_text)
     tier = f"T{tier_num.group()}" if tier_num else sanitize_component(tier_text)
-    img = page.locator('img.img-fluid').first
-    await img.wait_for(state="attached")
-    image_url = await img.get_attribute('src')
-    if image_url and not image_url.startswith('http'):
-        image_url = urllib.parse.urljoin(f"{BASE_URL}/", image_url)
-    if not image_url:
-        raise RuntimeError("Could not find image URL on card page.")
+    media_url = None
+
+    # Try static image first
+    img_loc = page.locator('img.img-fluid').first
+    try:
+        await img_loc.wait_for(state="attached", timeout=5000)
+        media_url = await img_loc.get_attribute('src')
+    except Exception:
+        pass
+
+    # Fall back to video (shoob serves .webm for animated cards)
+    if not media_url:
+        for sel in ('video source', 'video'):
+            loc = page.locator(sel).first
+            try:
+                await loc.wait_for(state="attached", timeout=5000)
+                media_url = await loc.get_attribute('src')
+                if media_url:
+                    break
+            except Exception:
+                pass
+
+    if media_url and not media_url.startswith('http'):
+        media_url = urllib.parse.urljoin(f"{BASE_URL}/", media_url)
+    if not media_url:
+        raise RuntimeError("Could not find image or video URL on card page.")
     return {
         'card_name': card_name.strip(),
         'anime_name': anime_name.strip(),
         'tier': tier,
-        'image_url': image_url.strip(),
+        'image_url': media_url.strip(),
     }
 
 
