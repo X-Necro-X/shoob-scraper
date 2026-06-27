@@ -1,3 +1,4 @@
+import os
 import re
 import subprocess
 import sys
@@ -7,7 +8,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request, send_from_directory
 
-BASE_DIR = Path(__file__).parent
+BASE_DIR = Path(os.environ.get('SHOOB_BASE_DIR', Path(__file__).parent))
 
 app = Flask(__name__)
 
@@ -45,7 +46,7 @@ def parse_filename(filename: str) -> dict:
     return {'name': name, 'anime': anime, 'tier': tier, 'image': filename}
 
 
-def _run_scraper(job_id: str) -> None:
+def _run_scraper_subprocess(job_id: str) -> None:
     try:
         proc = subprocess.Popen(
             [sys.executable, 'scraper.py'],
@@ -77,6 +78,24 @@ def _run_scraper(job_id: str) -> None:
 
     except Exception as exc:
         jobs[job_id] = {'status': 'error', 'message': str(exc)}
+
+
+def _run_scraper_inprocess(job_id: str) -> None:
+    try:
+        import asyncio
+        import scraper as _scraper
+        filename = asyncio.run(_scraper.run())
+        card = parse_filename(filename)
+        jobs[job_id] = {'status': 'done', 'card': card}
+    except Exception as exc:
+        jobs[job_id] = {'status': 'error', 'message': str(exc)}
+
+
+def _run_scraper(job_id: str) -> None:
+    if getattr(sys, 'frozen', False):
+        _run_scraper_inprocess(job_id)
+    else:
+        _run_scraper_subprocess(job_id)
 
 
 @app.get('/')

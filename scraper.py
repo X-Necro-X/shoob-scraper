@@ -11,6 +11,11 @@ from pathlib import Path
 
 from playwright.async_api import async_playwright, Page
 
+
+class AllCardsDownloaded(Exception):
+    pass
+
+
 BASE_URL = "https://shoob.gg/cards"
 OUTPUT_DIR = "./cards"
 SEEN_FILE = "./seen.json"
@@ -31,8 +36,7 @@ def save_seen(seen: list, path: str = SEEN_FILE) -> None:
 def generate_unique_number(seen: list, total: int) -> int:
     seen_set = set(seen)
     if len(seen_set) >= total:
-        print("All cards downloaded.")
-        sys.exit(0)
+        raise AllCardsDownloaded("All cards have been downloaded.")
     while True:
         n = random.randint(1, total)
         if n not in seen_set:
@@ -72,8 +76,7 @@ async def fetch_total(page: Page) -> int:
     text = await total_el.inner_text()
     m = re.search(r'Total (\d+)', text, re.IGNORECASE)
     if not m:
-        print("Error: could not parse total card count from page.")
-        sys.exit(1)
+        raise RuntimeError("Could not parse total card count from page.")
     return int(m.group(1))
 
 
@@ -95,8 +98,7 @@ async def get_card_info(page: Page, card_page: int, card_index: int) -> dict:
     if image_url and not image_url.startswith('http'):
         image_url = urllib.parse.urljoin(f"{BASE_URL}/", image_url)
     if not image_url:
-        print("Error: could not find image URL on card page.")
-        sys.exit(1)
+        raise RuntimeError("Could not find image URL on card page.")
     return {
         'card_name': card_name.strip(),
         'anime_name': anime_name.strip(),
@@ -120,21 +122,16 @@ async def download_image(url: str, dest: Path, page: Page) -> None:
         raise
 
 
-async def main() -> None:
-    parser = argparse.ArgumentParser(description="Download a random shoob.gg card.")
-    parser.add_argument('--headed', action='store_true', help='Show browser window')
-    args = parser.parse_args()
-
+async def run(headed: bool = False) -> str:
     seen = load_seen()
 
     async with async_playwright() as pw:
-        browser = await pw.chromium.launch(headless=not args.headed)
+        browser = await pw.chromium.launch(headless=not headed)
         page = await browser.new_page()
         try:
             total = await fetch_total(page)
             number = generate_unique_number(seen, total)
             card_page, card_index = calculate_page_and_index(number)
-
             info = await get_card_info(page, card_page, card_index)
 
             card_name = sanitize_component(info['card_name'])
@@ -149,9 +146,22 @@ async def main() -> None:
             seen.append(number)
             save_seen(seen)
 
-            print(f"Downloaded: {dest.name}")
+            return dest.name
         finally:
             await browser.close()
+
+
+async def main() -> None:
+    parser = argparse.ArgumentParser(description="Download a random shoob.gg card.")
+    parser.add_argument('--headed', action='store_true', help='Show browser window')
+    args = parser.parse_args()
+
+    try:
+        filename = await run(headed=args.headed)
+        print(f"Downloaded: {filename}")
+    except AllCardsDownloaded:
+        print("All cards downloaded.")
+        sys.exit(0)
 
 
 if __name__ == '__main__':

@@ -2,3 +2,5 @@ __pycache__/
 .playwright-mcp/
 *.pyc
 .pytest_cache/
+dist/
+build/
