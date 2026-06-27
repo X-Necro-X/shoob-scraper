@@ -72,7 +72,7 @@ def build_filename(card_name: str, anime_name: str, tier: str, output_dir: str, 
 async def fetch_total(page: Page) -> int:
     await page.goto(BASE_URL)
     total_el = page.locator("text=/TOTAL \\d+/i").first
-    await total_el.wait_for()
+    await total_el.wait_for(state="attached")
     text = await total_el.inner_text()
     m = re.search(r'Total (\d+)', text, re.IGNORECASE)
     if not m:
@@ -82,10 +82,10 @@ async def fetch_total(page: Page) -> int:
 
 async def get_card_info(page: Page, card_page: int, card_index: int) -> dict:
     await page.goto(f"{BASE_URL}?page={card_page}")
-    await page.locator('a[href^="/cards/info/"]').first.wait_for()
+    await page.locator('a[href^="/cards/info/"]').first.wait_for(state="attached")
     links = page.locator('a[href^="/cards/info/"]')
     await links.nth(card_index).click()
-    await page.locator('ol li').nth(3).wait_for()
+    await page.locator('ol li').nth(3).wait_for(state="attached")
     items = page.locator('ol li')
     tier_text = await items.nth(1).inner_text()
     anime_name = await items.nth(2).inner_text()
@@ -93,7 +93,7 @@ async def get_card_info(page: Page, card_page: int, card_index: int) -> dict:
     tier_num = re.search(r'\d+', tier_text)
     tier = f"T{tier_num.group()}" if tier_num else sanitize_component(tier_text)
     img = page.locator('img.img-fluid').first
-    await img.wait_for()
+    await img.wait_for(state="attached")
     image_url = await img.get_attribute('src')
     if image_url and not image_url.startswith('http'):
         image_url = urllib.parse.urljoin(f"{BASE_URL}/", image_url)
