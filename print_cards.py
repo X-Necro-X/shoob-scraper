@@ -25,11 +25,19 @@ def extract_middle_frame(video_path):
     return Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA))
 
 
+TARGET_HEIGHT = 980
+
 def process_image(src, dst):
     img = (src if isinstance(src, Image.Image) else Image.open(src)).convert('RGBA')
     result = Image.new('RGBA', img.size, (0, 0, 0, 255))
     result = Image.alpha_composite(result, img)
-    result.convert('RGB').save(dst, 'PNG')
+    w, h = result.size
+    if h < TARGET_HEIGHT:
+        padded = Image.new('RGB', (w, TARGET_HEIGHT), (0, 0, 0))
+        padded.paste(result.convert('RGB'), (0, (TARGET_HEIGHT - h) // 2))
+        padded.save(dst, 'PNG')
+    else:
+        result.convert('RGB').save(dst, 'PNG')
 
 
 def main():

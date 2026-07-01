@@ -1,6 +1,5 @@
 import argparse
 import asyncio
-import json
 import math
 import random
 import re
@@ -12,35 +11,9 @@ from pathlib import Path
 from playwright.async_api import async_playwright, Page
 
 
-class AllCardsDownloaded(Exception):
-    pass
-
-
 BASE_URL = "https://shoob.gg/cards"
 OUTPUT_DIR = "./cards"
-SEEN_FILE = "./seen.json"
 CARDS_PER_PAGE = 15
-
-
-def load_seen(path: str = SEEN_FILE) -> list:
-    p = Path(path)
-    if not p.exists():
-        return []
-    return json.loads(p.read_text())
-
-
-def save_seen(seen: list, path: str = SEEN_FILE) -> None:
-    Path(path).write_text(json.dumps(seen))
-
-
-def generate_unique_number(seen: list, total: int) -> int:
-    seen_set = set(seen)
-    if len(seen_set) >= total:
-        raise AllCardsDownloaded("All cards have been downloaded.")
-    while True:
-        n = random.randint(1, total)
-        if n not in seen_set:
-            return n
 
 
 def calculate_page_and_index(number: int, cards_per_page: int = CARDS_PER_PAGE) -> tuple:
@@ -142,14 +115,12 @@ async def download_image(url: str, dest: Path, page: Page) -> None:
 
 
 async def run(headed: bool = False) -> str:
-    seen = load_seen()
-
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=not headed)
         page = await browser.new_page()
         try:
             total = await fetch_total(page)
-            number = generate_unique_number(seen, total)
+            number = random.randint(1, total)
             card_page, card_index = calculate_page_and_index(number)
             info = await get_card_info(page, card_page, card_index)
 
@@ -162,9 +133,6 @@ async def run(headed: bool = False) -> str:
 
             await download_image(info['image_url'], dest, page)
 
-            seen.append(number)
-            save_seen(seen)
-
             return dest.name
         finally:
             await browser.close()
@@ -175,12 +143,8 @@ async def main() -> None:
     parser.add_argument('--headed', action='store_true', help='Show browser window')
     args = parser.parse_args()
 
-    try:
-        filename = await run(headed=args.headed)
-        print(f"Downloaded: {filename}")
-    except AllCardsDownloaded:
-        print("All cards downloaded.")
-        sys.exit(0)
+    filename = await run(headed=args.headed)
+    print(f"Downloaded: {filename}")
 
 
 if __name__ == '__main__':
